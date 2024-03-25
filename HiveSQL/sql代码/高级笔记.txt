@@ -1,0 +1,279 @@
+set hive.exec.mode.local.auto=true; 
+
+-- 第1题 同时在线人数问题
+--第一步  给 进入和出去 打上一个标记
+select
+  live_id,
+  in_datetime,
+  1 flag
+from
+  live_events
+union all
+select
+  live_id,
+  out_datetime,
+  -1 flag
+from
+  live_events;
+
+-- 窗口函数累加求和
+
+select
+  t1.live_id,
+  t1.in_datetime,
+  sum(t1.flag)over(partition by t1.live_id order by t1.in_datetime) perple_cn
+from
+  (
+select
+  live_id,
+  in_datetime,
+  1 flag
+from
+  live_events
+union all
+select
+  live_id,
+  out_datetime,
+  -1 flag
+from
+  live_events
+      )t1;
+
+-- 按照直播间分组 求最大值
+select
+  t2.live_id,
+  max(t2.perple_cn)
+from
+  (
+select
+  t1.live_id,
+  t1.in_datetime,
+  sum(t1.flag)over(partition by t1.live_id order by t1.in_datetime) perple_cn
+from
+  (
+select
+  live_id,
+  in_datetime,
+  1 flag
+from
+  live_events
+union all
+select
+  live_id,
+  out_datetime,
+  -1 flag
+from
+  live_events
+      )t1
+      )t2
+group by
+  t2.live_id;
+
+
+-- 第2题 会话划分问题
+-- 拿到每个用户的上一次浏览时间
+select
+  user_id,
+  page_id,
+  view_timestamp,
+  if(view_timestamp- lag(view_timestamp,1,0)over(partition by user_id order by view_timestamp)>60,1,0) flag
+from
+  page_view_events;
+
+-- 进行会话分组
+
+select
+  t1.user_id,
+  t1.page_id,
+  t1.view_timestamp,
+  concat(t1.user_id,'-',sum(t1.flag)over(partition by t1.user_id order by t1.view_timestamp)) session_id
+from
+  (
+select
+  user_id,
+  page_id,
+  view_timestamp,
+  if(view_timestamp- lag(view_timestamp,1,0)over(partition by user_id order by view_timestamp)>60,1,0) flag
+from
+  page_view_events
+      )t1;
+
+-- 第3题 间断连续登录用户问题
+-- 去重
+
+select
+  user_id,
+  date_format(login_datetime,'yyyy-MM-dd') login_date
+from
+  login_events
+group by
+  user_id,date_format(login_datetime,'yyyy-MM-dd');
+
+-- 拿上一行 判断差值是否大于2
+
+select
+  t1.user_id,
+  t1.login_date,
+  if(datediff(t1.login_date,lag(t1.login_date,1,'1970-01-01')over(partition by t1.user_id order by t1.login_date))>2,1,0) flag
+from
+  (
+
+select
+  user_id,
+  date_format(login_datetime,'yyyy-MM-dd') login_date
+from
+  login_events
+group by
+  user_id,date_format(login_datetime,'yyyy-MM-dd')
+      )t1;
+
+-- 累加求和
+select
+  t2.user_id,
+  t2.login_date,
+  sum(t2.flag)over(partition by t2.user_id order by t2.login_date) sum_flag
+from
+  (
+select
+  t1.user_id,
+  t1.login_date,
+  if(datediff(t1.login_date,lag(t1.login_date,1,'1970-01-01')over(partition by t1.user_id order by t1.login_date))>2,1,0) flag
+from
+  (
+
+select
+  user_id,
+  date_format(login_datetime,'yyyy-MM-dd') login_date
+from
+  login_events
+group by
+  user_id,date_format(login_datetime,'yyyy-MM-dd')
+      )t1
+      )t2;
+
+-- 按照user_id和 标记列分组 拿到连续的天数
+
+select
+  t3.user_id,
+  t3.sum_flag,
+  datediff(max(t3.login_date),min(t3.login_date)) +1 date_rk
+from
+  (
+select
+  t2.user_id,
+  t2.login_date,
+  sum(t2.flag)over(partition by t2.user_id order by t2.login_date) sum_flag
+from
+  (
+select
+  t1.user_id,
+  t1.login_date,
+  if(datediff(t1.login_date,lag(t1.login_date,1,'1970-01-01')over(partition by t1.user_id order by t1.login_date))>2,1,0) flag
+from
+  (
+
+select
+  user_id,
+  date_format(login_datetime,'yyyy-MM-dd') login_date
+from
+  login_events
+group by
+  user_id,date_format(login_datetime,'yyyy-MM-dd')
+      )t1
+      )t2
+      )t3
+group by
+  t3.user_id,t3.sum_flag;
+
+-- 拿到每个用户的连续最大值
+
+select
+  t4.user_id,
+  max(t4.date_rk) max_date_rk
+from
+  (
+select
+  t3.user_id,
+  t3.sum_flag,
+  datediff(max(t3.login_date),min(t3.login_date)) +1 date_rk
+from
+  (
+select
+  t2.user_id,
+  t2.login_date,
+  sum(t2.flag)over(partition by t2.user_id order by t2.login_date) sum_flag
+from
+  (
+select
+  t1.user_id,
+  t1.login_date,
+  if(datediff(t1.login_date,lag(t1.login_date,1,'1970-01-01')over(partition by t1.user_id order by t1.login_date))>2,1,0) flag
+from
+  (
+
+select
+  user_id,
+  date_format(login_datetime,'yyyy-MM-dd') login_date
+from
+  login_events
+group by
+  user_id,date_format(login_datetime,'yyyy-MM-dd')
+      )t1
+      )t2
+      )t3
+group by
+  t3.user_id,t3.sum_flag
+      )t4
+group by
+   t4.user_id;
+
+-- 第4题 日期交叉问题
+-- 按每个品牌 打折起始日期正序排序，然后每一行的上一行为止的最大结束日期
+select
+   brand,
+   start_date,
+   end_date,
+   max(end_date)over(partition by brand order by start_date rows  between unbounded preceding and 1 preceding) max_enddate
+from
+   promotion_info;
+
+-- 比较 上一行为止的最大结束日期和这一行的起始日期的关系
+
+select
+  t1.brand,
+  if(t1.max_enddate is null ,start_date,if(t1.max_enddate>=start_date,date_add(t1.max_enddate,1),start_date)) start_date,
+  end_date
+from
+  (
+select
+   brand,
+   start_date,
+   end_date,
+   max(end_date)over(partition by brand order by start_date rows  between unbounded preceding and 1 preceding) max_enddate
+from
+   promotion_info
+      )t1;
+
+-- 打折总天数
+select
+  t2.brand,
+  sum(if(datediff(t2.end_date,t2.start_date)>=0,datediff(t2.end_date,t2.start_date)+1,0))
+from
+  (
+select
+  t1.brand,
+  if(t1.max_enddate is null ,start_date,if(t1.max_enddate>=start_date,date_add(t1.max_enddate,1),start_date)) start_date,
+  end_date
+from
+  (
+select
+   brand,
+   start_date,
+   end_date,
+   max(end_date)over(partition by brand order by start_date rows  between unbounded preceding and 1 preceding) max_enddate
+from
+   promotion_info
+      )t1
+      )t2
+group by
+ t2.brand

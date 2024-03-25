@@ -1,0 +1,650 @@
+-- 1. 查询姓名中带“山”的学生名单
+select *
+from student_info
+where stu_name like '%山%';
+
+-- 2. 查询姓“王”老师的个数
+
+select count(*)
+from teacher_info
+where tea_name like '王%';
+
+
+-- 3. 检索课程编号为“04”且分数小于60的学生的分数信息，结果按分数降序排列
+select stu_id,
+       course_id,
+       score
+from score_info
+where course_id = 04
+  and score < 60
+order by score desc;
+
+
+-- 4. 查询数学成绩不及格的学生信息和其对应的数学学科成绩，按照学号升序排序
+
+select stu_id,
+       score
+from score_info
+where course_id = (select course_id from course_info where course_name = '数学')
+  and score < 60;
+
+
+select si.stu_id,
+       si.stu_name,
+       t1.score
+from student_info si
+         join
+     (select stu_id,
+             score
+      from score_info
+      where course_id = (select course_id from course_info where course_name = '数学')
+        and score < 60) t1
+     on
+         si.stu_id = t1.stu_id
+order by si.stu_id asc;
+
+
+-- 分组练习
+-- 1. 查询编号为“02”的课程的总成绩
+
+select course_id,
+       sum(score) sum_sc
+from score_info
+where course_id = 03
+group by course_id;
+
+
+-- 2. 查询参加考试的学生个数
+-- 第一种
+select count(distinct stu_id)
+from score_info;
+
+-- 第二种
+select stu_id
+from score_info
+group by stu_id;
+
+select count(*)
+from (
+         select stu_id
+         from score_info
+         group by stu_id
+     ) t1;
+
+
+-- 1. 查询各科成绩最高和最低的分，以如下的形式显示：课程号、最高分、最低分
+select course_id,
+       max(score) min_sc,
+       min(score) max_sc
+from score_info
+group by course_id;
+
+
+-- 2. 查询每门课程有多少学生参加了考试（有考试成绩）
+
+select course_id,
+       count(*)
+from score_info
+group by course_id;
+
+
+-- 3. 查询男生、女生人数
+select sex,
+       count(*)
+from student_info
+group by sex;
+
+
+-- 对分组结果的条件查询
+-- 1. 查询平均成绩大于60分的学生的学号和平均成绩
+select stu_id,
+       avg(score) avg_sc
+from score_info
+group by stu_id
+having avg_sc >= 60;
+
+
+-- 2. 查询至少考了四门课程的学生学号
+select stu_id,
+       count(*) cc
+from score_info
+group by stu_id
+having cc >= 4;
+
+
+-- 3. 查询每门课程的平均成绩，结果按平均成绩升序排序，平均成绩相同时，按课程号降序排列
+
+select course_id,
+       avg(score) avg_sc
+from score_info
+group by course_id
+order by avg_sc asc, course_id desc;
+
+
+-- 4. 统计参加考试人数大于等于15的学科
+
+select course_id,
+       count(*) cc
+from score_info
+group by course_id
+having cc >= 15;
+-- 查询结果排序和分组指定条件
+-- 1. 查询学生的总成绩并按照总成绩降序排序
+select stu_id,
+       sum(score) sum_sc
+from score_info
+group by stu_id
+order by sum_sc desc;
+
+
+
+-- 2. 查询一共参加三门课程且其中一门为语文课程的学生的id和姓名
+--2.1
+-- 第一步 学习三门课程
+select stu_id
+from score_info
+group by stu_id
+having count(*) = 3;
+
+--  判断是否学习过语文课程
+
+select stu_id
+from score_info
+where stu_id in (select stu_id
+                 from score_info
+                 group by stu_id
+                 having count(*) = 3)
+  and course_id = (select course_id from course_info where course_name = '语文');
+
+
+-- 2.2
+-- 第一步 先判断学习过语文的学生
+select stu_id
+from score_info si
+         join
+     course_info ci
+     on
+         si.course_id = ci.course_id
+where ci.course_name = '语文';
+
+-- 第二步 判断这些学生所选课程是否为3个
+select stu_id,
+       count(*) cc
+from score_info
+where stu_id in (select stu_id
+                 from score_info si
+                          join
+                      course_info ci
+                      on
+                          si.course_id = ci.course_id
+                 where ci.course_name = '语文')
+group by stu_id
+having cc = 3;
+
+-- 第三步 跟学生表Join 获取学生姓名
+select si.stu_id,
+       si.stu_name
+from student_info si
+         join
+     (select stu_id,
+             count(*) cc
+      from score_info
+      where stu_id in (select stu_id
+                       from score_info si
+                                join
+                            course_info ci
+                            on
+                                si.course_id = ci.course_id
+                       where ci.course_name = '语文')
+      group by stu_id
+      having cc = 3) t1
+     on
+         si.stu_id = t1.stu_id;
+
+-- 6.4 复杂查询练习
+-- 1. 查询没有学全所有课的学生的学号、姓名
+-- 第一步 获取当前所有学生的课程总量,判断是否小于课程总量
+select stu_id,
+       count(*) cc
+from score_info
+group by stu_id
+having count(*) < (select count(*) from course_info);
+
+-- 第二步 跟学生表进行外连接
+select *
+from student_info si
+         left join
+     (select stu_id,
+             count(*) cc
+      from score_info
+      group by stu_id
+      having count(*) < (select count(*) from course_info)) t1
+     on
+         si.stu_id = t1.stu_id;
+
+------------------  以上是错误答案
+
+-- 第一步 先将学生表和分数表进行外连接
+select *
+from student_info sti
+         left join
+     score_info sci
+     on
+         sti.stu_id = sci.stu_id;
+-- 第二步 进行学生课程总量的统计，判断是否小于总课程量
+
+select sti.stu_id,
+       sti.stu_name,
+       count(sci.course_id)
+from student_info sti
+         left join
+     score_info sci
+     on
+         sti.stu_id = sci.stu_id
+group by sti.stu_id, sti.stu_name
+having count(sci.course_id) < (select count(*) from course_info);
+
+
+-- 2. 查询出只选修了三门课程的全部学生的学号和姓名
+
+select stu_id,
+       count(*) cc
+from score_info
+group by stu_id
+having cc = 3;
+
+-- 跟学生表进行Join  获取学生姓名
+select si.stu_id,
+       si.stu_name
+from student_info si
+         join
+     (select stu_id,
+             count(*) cc
+      from score_info
+      group by stu_id
+      having cc = 3) t1
+     on
+         si.stu_id = t1.stu_id;
+
+
+-- 6.5 多表查询练习
+-- 6.5.1 表连接
+-- 1. 查询所有学生的学号、姓名、选课数、总成绩
+-- 1.1 先通过分数表求出学生的选课数，总成绩 再join
+select stu_id,
+       count(*)   cc,
+       sum(score) sum_sc
+from score_info
+group by stu_id;
+
+
+---
+select sti.stu_id,
+       sti.stu_name,
+       nvl(t1.cc, 0),
+       nvl(t1.sum_sc, 0)
+from student_info sti
+         left join
+     (select stu_id,
+             count(*)   cc,
+             sum(score) sum_sc
+      from score_info
+      group by stu_id) t1
+     on
+         sti.stu_id = t1.stu_id;
+
+
+-- 第二种 先leftjoin 再进行统计
+
+select sti.stu_id,
+       sti.stu_name,
+       nvl(count(sci.course_id), 0) cc,
+       nvl(sum(sci.score), 0)       sum_cc
+from student_info sti
+         left join
+     score_info sci
+     on
+         sti.stu_id = sci.stu_id
+group by sti.stu_id, sti.stu_name;
+
+
+-- 2. 查询平均成绩大于85的所有学生的学号、姓名和平均成绩
+
+select sci.stu_id,
+       sti.stu_name,
+       avg(sci.score) avg_sc
+from score_info sci
+         join
+     student_info sti
+     on
+         sci.stu_id = sti.stu_id
+group by sci.stu_id, sti.stu_name
+having avg_sc >= 85;
+
+
+-- 3. 查询学生的选课情况：学号，姓名，课程号，课程名称
+
+-- 学生表作为查询的主表
+select sti.stu_id,
+       sti.stu_name,
+       ci.course_id,
+       ci.course_name
+from student_info sti
+         left join
+     score_info sci
+     on
+         sti.stu_id = sci.stu_id
+         left join
+     course_info ci
+     on
+         sci.course_id = ci.course_id;
+
+-- 4. 查询课程编号为03且课程成绩在80分以上的学生的学号和姓名及课程信息
+
+-- 第一步拿到 为03且课程成绩在80分以上的学生的学号
+
+select stu_id,
+       course_id
+from score_info
+where course_id = 03
+  and score >= 80;
+-- 进行多表的内连接 然后拿到所有的信息
+
+select t1.stu_id,
+       sti.stu_name,
+       ci.course_id,
+       ci.course_name
+from (select stu_id,
+             course_id
+      from score_info
+      where course_id = 03
+        and score >= 80) t1
+         join
+     student_info sti
+     on
+         t1.stu_id = sti.stu_id
+         join
+     course_info ci
+     on
+         t1.course_id = ci.course_id;
+
+-- 6.5.2 多表连接
+-- 1. 课程编号为"01"且课程分数小于60，按分数降序排列的学生信息
+
+-- 先拼接 再过滤
+select sti.*,
+       sci.course_id,
+       sci.score
+from score_info sci
+         join
+     student_info sti
+     on
+         sci.stu_id = sti.stu_id
+where sci.course_id = 01
+  and sci.score < 60
+order by sci.score desc;
+----------------------
+select *,
+       if(score < 70, 1, 0) flag
+from score_info t1;
+
+select t1.stu_id,
+       sum(flag) sf
+from (
+         select *,
+                if(score < 70, 1, 0) flag
+         from score_info
+     ) t1
+group by t1.stu_id
+having sf = 0;
+
+select stu_id,
+       sum(if(score < 70, 1, 0)) sf
+from score_info
+group by stu_id
+having sf = 0;
+
+
+-- 2. 查询所有课程成绩在70分以上的学生的姓名、课程名称和分数，按分数升序排列
+select sti.stu_id,
+       sti.stu_name,
+       ci.course_name,
+       sci.score
+from (select stu_id,
+             sum(if(score < 70, 1, 0)) sf
+      from score_info
+      group by stu_id
+      having sf = 0) t1
+         join
+     score_info sci
+     on
+         t1.stu_id = sci.stu_id
+         join
+     student_info sti
+     on
+         t1.stu_id = sti.stu_id
+         join
+     course_info ci
+     on
+         sci.course_id = ci.course_id
+order by sci.score;
+
+-- 3. 查询该学生不同课程的成绩相同的学生编号、课程编号、学生成绩
+-- 自连接  条件 stuid相同 课程id不同 分数相同
+select s1.*
+from score_info s1
+         join
+     score_info s2
+     on
+             s1.stu_id = s2.stu_id and s1.course_id != s2.course_id and s1.score = s2.score;
+
+-- 4. 查询课程编号为“01”的课程比“02”的课程成绩高的所有学生的学号
+-- 自连接
+select s1.stu_id
+from score_info s1
+         join
+     score_info s2
+     on
+         s1.stu_id = s2.stu_id and s1.score > s2.score
+where s1.course_id = 01
+  and s2.course_id = 02;
+
+--  先过滤 再join
+select stu_id,
+       score
+from score_info
+where course_id = 01;
+
+select stu_id,
+       score
+from score_info
+where course_id = 02;
+
+
+select t1.stu_id
+from (select stu_id,
+             score
+      from score_info
+      where course_id = 01) t1
+         join
+     (select stu_id,
+             score
+      from score_info
+      where course_id = 02) t2
+     on
+         t1.stu_id = t2.stu_id and t1.score > t2.score;
+
+
+-- 5. 查询学过编号为“01”的课程并且也学过编号为“02”的课程的学生的学号、姓名
+
+-- 先拿到 02 的所有学生id
+select stu_id
+from score_info
+where course_id = 02;
+
+-- 拿到既学过01又学过02的学生id
+select stu_id
+from score_info
+where course_id = 01
+  and stu_id in (select stu_id
+                 from score_info
+                 where course_id = 02);
+-- 拼接 拿到姓名
+select sti.stu_id,
+       sti.stu_name
+from student_info sti
+         join
+     (select stu_id
+      from score_info
+      where course_id = 01
+        and stu_id in (select stu_id
+                       from score_info
+                       where course_id = 02)) t1
+     on
+         sti.stu_id = t1.stu_id;
+
+--  6. 查询学过“李体音”老师所教的所有课的同学的学号、姓名
+--  第一步 拿到李体音老师教过的课程id
+select course_id
+from course_info ci
+         join
+     teacher_info ti
+     on
+         ci.tea_id = ti.tea_id
+where ti.tea_name = '李体音';
+
+-- 第二步 拿到学过李体音老师课程的所有学生
+select stu_id
+from score_info
+where course_id in (select course_id
+                    from course_info ci
+                             join
+                         teacher_info ti
+                         on
+                             ci.tea_id = ti.tea_id
+                    where ti.tea_name = '李体音')
+group by stu_id
+having count(*) = (select count(*)
+                   from course_info ci
+                            join
+                        teacher_info ti
+                        on
+                            ci.tea_id = ti.tea_id
+                   where ti.tea_name = '李体音');
+
+-- 第三步 通过学号拿姓名
+select sti.stu_id,
+       sti.stu_name
+from student_info sti
+         join
+     (select stu_id
+      from score_info
+      where course_id in (select course_id
+                          from course_info ci
+                                   join
+                               teacher_info ti
+                               on
+                                   ci.tea_id = ti.tea_id
+                          where ti.tea_name = '李体音')
+      group by stu_id
+      having count(*) = (select count(*)
+                         from course_info ci
+                                  join
+                              teacher_info ti
+                              on
+                                  ci.tea_id = ti.tea_id
+                         where ti.tea_name = '李体音')) t1
+     on
+         sti.stu_id = t1.stu_id;
+
+-- 7. 查询学过“李体音”老师所讲授的任意一门课程的学生的学号、姓名
+--  第一步 拿到李体音老师教过的课程id
+select course_id
+from course_info ci
+         join
+     teacher_info ti
+     on
+         ci.tea_id = ti.tea_id
+where ti.tea_name = '李体音';
+
+-- 第二步 拿到学过李体音老师的课程的学生id
+select distinct stu_id
+from score_info
+where course_id in (select course_id
+                    from course_info ci
+                             join
+                         teacher_info ti
+                         on
+                             ci.tea_id = ti.tea_id
+                    where ti.tea_name = '李体音');
+
+-- 8. 查询没学过"李体音"老师讲授的任一门课程的学生姓名
+-- 过滤掉学过的学生id
+select stu_id,
+       stu_name
+from student_info
+where stu_id not in (select distinct stu_id
+                     from score_info
+                     where course_id in (select course_id
+                                         from course_info ci
+                                                  join
+                                              teacher_info ti
+                                              on
+                                                  ci.tea_id = ti.tea_id
+                                         where ti.tea_name = '李体音'));
+
+
+-- 9. 查询至少有一门课与学号为“001”的学生所学课程相同的学生的学号和姓名
+-- 第一步 获取001号学生学习的所有课程id
+select course_id
+from score_info
+where stu_id = 001;
+-- 获取到至少有一门课与学号为“001”的学生所学课程相同的学生的学号
+select distinct stu_id
+from score_info
+where course_id in (select course_id
+                    from score_info
+                    where stu_id = 001)
+  and stu_id != 01;
+-- 内连接获取学生姓名
+select sti.stu_id,
+       sti.stu_name
+from student_info sti
+         join
+     (select distinct stu_id
+      from score_info
+      where course_id in (select course_id
+                          from score_info
+                          where stu_id = 001)
+        and stu_id != 01) t1
+     on
+         sti.stu_id = t1.stu_id;
+
+
+-- 10. 按平均成绩从高到低显示所有学生的所有课程的成绩以及平均成绩
+-- 先用学生表左外联分数表
+select sti.stu_id,
+       sti.stu_name,
+       sci.course_id,
+       sci.score,
+       t1.avg_sc
+from student_info sti
+         left join
+     score_info sci
+     on
+         sti.stu_id = sci.stu_id
+         left join
+     (select stu_id,
+             avg(score) avg_sc
+      from score_info
+      group by stu_id) t1
+on
+  sti.stu_id=t1.stu_id
+order by
+  t1.avg_sc desc;
+
+-- 求出平均成绩
+select stu_id,
+       avg(score)
+from score_info
+group by stu_id;

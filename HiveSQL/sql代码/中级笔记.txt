@@ -1,0 +1,1738 @@
+set hive.exec.mode.local.auto=true; 
+
+-- 2.1 [课堂讲解]查询累积销量排名第二的商品
+-- 求出每个商品购买的总件数
+select
+  sku_id,
+  sum(sku_num) ssn
+from
+  order_detail
+group by
+  sku_id;
+
+-- 根据rank拿到排名第二
+select
+  t1.sku_id,
+  t1.ssn,
+  rank() over (order by t1.ssn desc) rk
+from
+  (select
+  sku_id,
+  sum(sku_num) ssn
+from
+  order_detail
+group by
+  sku_id)t1;
+
+--  过滤rk=2
+select
+  t2.sku_id
+from
+  (select
+  t1.sku_id,
+  t1.ssn,
+  rank() over (order by t1.ssn desc) rk
+from
+  (select
+  sku_id,
+  sum(sku_num) ssn
+from
+  order_detail
+group by
+  sku_id)t1)t2
+where
+  t2.rk=13;
+
+
+select
+  *
+from
+  (select
+  t2.sku_id
+from
+  (select
+  t1.sku_id,
+  t1.ssn,
+  rank() over (order by t1.ssn desc) rk
+from
+  (select
+  sku_id,
+  sum(sku_num) ssn
+from
+  order_detail
+group by
+  sku_id)t1)t2
+where
+  t2.rk=2)t3
+right join
+ (select 1) t4
+on 1=1;
+
+
+-- 2.2 [课堂讲解]查询至少连续三天下单的用户
+-- 去重 distinct group by
+select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date;
+
+-- 拿上一行和下一行  判断和本行日期的值是否差值1
+
+
+select
+  t1.user_id,
+  t1.create_date,
+  datediff(t1.create_date,lag(t1.create_date)over(partition by t1.user_id order by t1.create_date))  last_time,
+  datediff(t1.create_date,lead(t1.create_date)over(partition by t1.user_id order by t1.create_date))   next_time
+from
+  (
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1;
+
+-- 过滤出来连续的用户
+select
+  distinct
+  t2.user_id
+from
+  (select
+  t1.user_id,
+  t1.create_date,
+  datediff(t1.create_date,lag(t1.create_date)over(partition by t1.user_id order by t1.create_date))  last_time,
+  datediff(t1.create_date,lead(t1.create_date)over(partition by t1.user_id order by t1.create_date))   next_time
+from
+  (
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1)t2
+where
+  t2.last_time=1 and t2.next_time=-1;
+
+
+-- 至少连续三天，这连续的天数分别哪几天
+
+select
+  t1.user_id,
+  t1.create_date,
+  lag(t1.create_date)over(partition by t1.user_id order by t1.create_date) zt,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) mt,
+  datediff(t1.create_date,lag(t1.create_date)over(partition by t1.user_id order by t1.create_date))  last_time,
+  datediff(t1.create_date,lead(t1.create_date)over(partition by t1.user_id order by t1.create_date))   next_time
+from
+  (
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1;
+--  过滤 三天以上
+select
+  t2.user_id,
+  concat_ws(',',t2.zt,t2.create_date,t2.mt)
+from
+  (
+select
+  t1.user_id,
+  t1.create_date,
+  lag(t1.create_date)over(partition by t1.user_id order by t1.create_date) zt,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) mt,
+  datediff(t1.create_date,lag(t1.create_date)over(partition by t1.user_id order by t1.create_date))  last_time,
+  datediff(t1.create_date,lead(t1.create_date)over(partition by t1.user_id order by t1.create_date))   next_time
+from
+  (
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1
+      )t2
+where
+  t2.next_time=-1 and t2.last_time=1;
+-- 炸裂函数 然后去重
+select
+  distinct
+  t3.user_id,
+  crea_date
+from
+  (
+select
+  t2.user_id,
+  concat_ws(',',t2.zt,t2.create_date,t2.mt) concat_date
+from
+  (
+select
+  t1.user_id,
+  t1.create_date,
+  lag(t1.create_date)over(partition by t1.user_id order by t1.create_date) zt,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) mt,
+  datediff(t1.create_date,lag(t1.create_date)over(partition by t1.user_id order by t1.create_date))  last_time,
+  datediff(t1.create_date,lead(t1.create_date)over(partition by t1.user_id order by t1.create_date))   next_time
+from
+  (
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1
+      )t2
+where
+  t2.next_time=-1 and t2.last_time=1
+      )t3
+lateral  view explode(split(t3.concat_date,',')) tmp as crea_date;
+
+
+-- 通过直接过滤的方式拿到  连续几天并且 分别是哪几天
+      select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date;
+--拿到每一行的前天 昨天  明天 后天
+select
+  t1.user_id,
+  datediff(t1.create_date,lag(t1.create_date,2,null)over(partition by t1.user_id order by t1.create_date)) jt_qt,
+  datediff(t1.create_date,lag(t1.create_date,1,null)over(partition by t1.user_id order by t1.create_date)) jt_zt,
+  t1.create_date,
+  datediff(t1.create_date,lead(t1.create_date,1,null)over(partition by t1.user_id order by t1.create_date)) jt_mt,
+  datediff(t1.create_date,lead(t1.create_date,2,null)over(partition by t1.user_id order by t1.create_date)) jt_ht
+from
+  (
+select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1;
+
+select
+  t2.user_id,
+  t2.create_date
+from
+  (
+select
+  t1.user_id,
+  datediff(t1.create_date,lag(t1.create_date,2,null)over(partition by t1.user_id order by t1.create_date)) jt_qt,
+  datediff(t1.create_date,lag(t1.create_date,1,null)over(partition by t1.user_id order by t1.create_date)) jt_zt,
+  t1.create_date,
+  datediff(t1.create_date,lead(t1.create_date,1,null)over(partition by t1.user_id order by t1.create_date)) jt_mt,
+  datediff(t1.create_date,lead(t1.create_date,2,null)over(partition by t1.user_id order by t1.create_date)) jt_ht
+from
+  (
+select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date
+      )t1
+      )t2
+where
+  (t2.jt_zt=1 and t2.jt_qt=2)or(t2.jt_mt=-1 and jt_zt=1)or(jt_mt=-1 and jt_ht=-2);
+
+
+-- 通用写法
+select
+    user_id,
+    create_date
+from
+     order_info
+group by
+     user_id,
+     create_date;
+-- 每个购买的日期加上个等差数列
+-- rank row_number
+select
+  t1.user_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.user_id order by t1.create_date)) drk
+from
+  (
+   select
+       user_id,
+       create_date
+   from
+        order_info
+   group by
+        user_id,
+        create_date
+      )t1;
+-- 进行窗口函数的count 并保留结束
+select
+  t2.user_id,
+  t2.create_date,
+  count(*)over(partition by t2.user_id,t2.drk) cdrk
+from
+  (
+select
+  t1.user_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.user_id order by t1.create_date)) drk
+from
+  (
+   select
+       user_id,
+       create_date
+   from
+        order_info
+   group by
+        user_id,
+        create_date
+      )t1
+      )t2;
+select
+  t3.user_id,
+  t3.create_date
+from
+    (select
+  t2.user_id,
+  t2.create_date,
+  count(*)over(partition by t2.user_id,t2.drk) cdrk
+from
+  (
+select
+  t1.user_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.user_id order by t1.create_date)) drk
+from
+  (
+   select
+       user_id,
+       create_date
+   from
+        order_info
+   group by
+        user_id,
+        create_date
+      )t1
+      )t2)t3
+where
+  t3.cdrk>=3;
+
+-- 2.3 [课堂讲解]查询各品类销售商品的种类数及销量最高的商
+-- 第一步 拿到每个品类下面有多少个商品
+select
+  ci.category_id,
+  ci.category_name,
+  count(*) cn
+from
+  sku_info si
+join
+  category_info ci
+on
+  si.category_id=ci.category_id
+group by
+  ci.category_id,ci.category_name;
+
+-- 第二步 拿到每个商品的名字和品类id 以及这个商品一共售卖多少件
+select
+  si.sku_id,
+  si.name,
+  si.category_id,
+  sum(sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on od.sku_id = si.sku_id
+group by
+  si.sku_id,si.name,si.category_id;
+
+-- 第三步 拿到每个品类下卖的最好的商品
+select
+  t1.sku_id,
+  t1.name,
+  t1.category_id,
+  t1.sku_sum,
+ rank()over(partition by t1.category_id order by t1.sku_sum desc) rk
+from
+  (
+select
+  si.sku_id,
+  si.name,
+  si.category_id,
+  sum(sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on od.sku_id = si.sku_id
+group by
+  si.sku_id,si.name,si.category_id
+      )t1;
+
+select
+  t2.category_id,
+  t2.sku_id,
+  t2.name,
+  t2.sku_sum
+from
+  (
+select
+  t1.sku_id,
+  t1.name,
+  t1.category_id,
+  t1.sku_sum,
+ rank()over(partition by t1.category_id order by t1.sku_sum desc) rk
+from
+  (
+select
+  si.sku_id,
+  si.name,
+  si.category_id,
+  sum(sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on od.sku_id = si.sku_id
+group by
+  si.sku_id,si.name,si.category_id
+      )t1
+      )t2
+where
+  t2.rk=1;
+
+-- 第四步 将结果进行拼接
+select
+  s1.*,
+  s2.sku_id,
+  s2.name,
+  s2.sku_sum
+from
+  (
+select
+  ci.category_id,
+  ci.category_name,
+  count(*) cn
+from
+  sku_info si
+join
+  category_info ci
+on
+  si.category_id=ci.category_id
+group by
+  ci.category_id,ci.category_name
+      )s1
+join
+  (
+select
+  t2.category_id,
+  t2.sku_id,
+  t2.name,
+  t2.sku_sum
+from
+  (
+select
+  t1.sku_id,
+  t1.name,
+  t1.category_id,
+  t1.sku_sum,
+ rank()over(partition by t1.category_id order by t1.sku_sum desc) rk
+from
+  (
+select
+  si.sku_id,
+  si.name,
+  si.category_id,
+  sum(sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on od.sku_id = si.sku_id
+group by
+  si.sku_id,si.name,si.category_id
+      )t1
+      )t2
+where
+  t2.rk=1
+      )s2
+on
+  s1.category_id=s2.category_id;
+
+-- 2.4 [课堂讲解]查询用户的累计消费金额及VIP等级
+-- 求出每个用户每天消费总金额
+select
+  user_id,
+  create_date,
+  sum(total_amount) sum_amount
+from
+  order_info
+group by
+  user_id,create_date;
+-- 按照时间对消费的金额进行累加
+select
+  t1.user_id,
+  t1.create_date,
+  sum(t1.sum_amount)over(partition by t1.user_id order by t1.create_date) sum_amount
+from
+(select
+  user_id,
+  create_date,
+  sum(total_amount) sum_amount
+from
+  order_info
+group by
+  user_id,create_date)t1;
+-- 按照标签金额打上vip等级
+select
+  t2.user_id,
+  t2.create_date,
+  t2.sum_amount,
+   case
+       when  t2.sum_amount <10000 then '普通会员'
+       when  t2.sum_amount >=10000 and t2.sum_amount<30000 then '青铜会员'
+       when  t2.sum_amount >=30000 and t2.sum_amount<50000 then '白银会员'
+       when  t2.sum_amount >=50000 and t2.sum_amount<80000 then '黄金会员'
+       when  t2.sum_amount >=80000 and t2.sum_amount<100000 then'白金会员'
+       when  t2.sum_amount >=100000 then '钻石会员'
+  end
+from
+ (
+select
+  t1.user_id,
+  t1.create_date,
+  sum(t1.sum_amount)over(partition by t1.user_id order by t1.create_date) sum_amount
+from
+(select
+  user_id,
+  create_date,
+  sum(total_amount) sum_amount
+from
+  order_info
+group by
+  user_id,create_date)t1
+     )t2;
+
+select concat(round(sum(if(datediff(buy_date_second, buy_date_first) = 1, 1, 0)) / count(*) * 100, 1), '%') percentage
+from (
+         select user_id,
+                min(create_date) buy_date_first,
+                max(create_date) buy_date_second
+         from (
+                  select user_id,
+                         create_date,
+                         rank() over (partition by user_id order by create_date) rk
+                  from (
+                           select user_id,
+                                  create_date
+                           from order_info
+                           group by user_id, create_date
+                       ) t1
+              ) t2
+         where rk <= 2
+         group by user_id
+     ) t3;
+
+
+-- 2.5 [课堂讲解]查询首次下单后第二天连续下单的用户比率
+-- 去重
+select
+  user_id,
+  create_date
+from
+  order_info
+group by
+  user_id,create_date;
+
+-- 拿到每个用户每天下单的下一次下单日期，顺便按照每个用户下单时间进行排名
+select
+  t1.user_id,
+  t1.create_date,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) next_time,
+  rank()over(partition by t1.user_id order by t1.create_date) rk
+from
+  (select
+  user_id,
+  create_date
+from
+  order_info
+group by
+  user_id,create_date)t1;
+
+-- 过滤rk=1
+select
+  t2.user_id,
+  t2.create_date,
+  t2.next_time
+from
+  (select
+  t1.user_id,
+  t1.create_date,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) next_time,
+  rank()over(partition by t1.user_id order by t1.create_date) rk
+from
+  (select
+  user_id,
+  create_date
+from
+  order_info
+group by
+  user_id,create_date)t1)t2
+where
+  t2.rk=1;
+-- 判断 next_time时间和create_time的时间差值是否为1
+select
+  concat(round(count(if(datediff(t3.next_time,t3.create_date)=1,1,null))/count(*)*100,1),'%')
+from
+  (
+select
+  t2.user_id,
+  t2.create_date,
+  t2.next_time
+from
+  (select
+  t1.user_id,
+  t1.create_date,
+  lead(t1.create_date)over(partition by t1.user_id order by t1.create_date) next_time,
+  rank()over(partition by t1.user_id order by t1.create_date) rk
+from
+  (select
+  user_id,
+  create_date
+from
+  order_info
+group by
+  user_id,create_date)t1)t2
+where
+  t2.rk=1
+      )t3;
+
+         select user_id,
+                min(create_date) buy_date_first,
+                max(create_date) buy_date_second
+         from (
+                  select user_id,
+                         create_date,
+                         rank() over (partition by user_id order by create_date) rk
+                  from (
+                           select user_id,
+                                  create_date
+                           from order_info
+                           group by user_id, create_date
+                       ) t1
+              ) t2
+         where rk <= 2
+         group by user_id;
+
+-- 2.6 每个商品销售首年的年份、销售数量和销售金额
+
+-- 求出每个商品首年的所有数据
+select
+   sku_id,
+   sku_num,
+   price,
+   create_date,
+  rank() over (partition by sku_id order by year(create_date)) rk
+from
+     order_detail;
+
+-- 过滤后求和
+
+select
+  t1.sku_id,
+  year(t1.create_date),
+  sum(t1.sku_num) total_num,
+  sum(t1.sku_num*t1.price) total_amount
+from
+  (select
+   sku_id,
+   sku_num,
+   price,
+   create_date,
+  rank() over (partition by sku_id order by year(create_date)) rk
+from
+     order_detail)t1
+where
+  t1.rk=1
+group by
+  t1.sku_id,year(t1.create_date);
+
+
+-- 2.7 统计每个商品的销量最高的日期
+select
+  sku_id,
+  create_date,
+  sum(sku_num) sku_sum
+from
+    order_detail
+group by
+   sku_id,create_date;
+
+-- 通过窗口函数 求出订单最高的最小日期
+
+select
+  t1.sku_id,
+  t1.create_date,
+  t1.sku_sum,
+  rank()over(partition by t1.sku_id order by t1.sku_sum desc,t1.create_date) rk
+from
+  (
+select
+  sku_id,
+  create_date,
+  sum(sku_num) sku_sum
+from
+    order_detail
+group by
+   sku_id,create_date
+      )t1;
+select
+   t2.sku_id,
+   t2.create_date,
+   t2.sku_sum
+from
+  (
+select
+  t1.sku_id,
+  t1.create_date,
+  t1.sku_sum,
+  rank()over(partition by t1.sku_id order by t1.sku_sum desc,t1.create_date) rk
+from
+  (
+select
+  sku_id,
+  create_date,
+  sum(sku_num) sku_sum
+from
+    order_detail
+group by
+   sku_id,create_date
+      )t1
+      )t2
+where
+  t2.rk=1;
+
+
+-- 2.8 查询销售件数高于品类平均数的商品
+select
+  od.sku_id,
+  si.category_id,
+  sum(od.sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+group by
+  od.sku_id,si.category_id;
+
+-- 求出每个品类销售平均值
+select
+  t1.category_id,
+  avg(sku_sum) avg_sum
+from
+  (select
+  od.sku_id,
+  si.category_id,
+  sum(od.sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+group by
+  od.sku_id,si.category_id)t1
+group by
+  t1.category_id;
+
+
+-- 第二种
+select
+  od.sku_id,
+  si.category_id,
+  si.name,
+  sum(od.sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+group by
+  od.sku_id,si.category_id,si.name;
+
+--直接在保留上表的结果情况下，求每个品类的平均值
+select
+  t1.sku_id,
+  t1.category_id,
+  t1.sku_sum,
+  t1.name,
+  avg(t1.sku_sum)over(partition by t1.category_id) avg_sum
+from
+  (
+select
+  od.sku_id,
+  si.category_id,
+  si.name,
+  sum(od.sku_num) sku_sum
+from
+  order_detail od
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+group by
+  od.sku_id,si.category_id,si.name
+      )t1;
+select
+  t2.sku_id,
+  t2.name,
+  t2.sum_num,
+  t2.cate_avg_sum
+from
+  (select
+  t1.sku_id,
+  t1.category_id,
+  t1.sum_num,
+  t1.name,
+  cast(avg(t1.sum_num)over(partition by t1.category_id)as bigint)  cate_avg_sum
+from
+  (
+select
+         od.sku_id,
+         si.category_id,
+         si.name,
+         sum(od.sku_num) sum_num
+from
+         order_detail od
+join
+         sku_info si
+on
+         od.sku_id=si.sku_id
+group by
+          od.sku_id,si.category_id,si.name
+      )t1)t2
+where
+  t2.sum_num>t2.cate_avg_sum;
+
+-- 2.9 查询指定日期的全部商品价格
+
+select
+  sku_id,
+  new_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail
+where
+  change_date<='2021-10-01';
+
+-- 过滤最新的
+select
+  t1.sku_id,
+  t1.new_price
+from
+  (
+select
+  sku_id,
+  new_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail
+where
+  change_date<='2021-10-01'
+      )t1
+where
+  t1.rk=1;
+
+--拿到所有商品的最新价格
+select
+  si.sku_id,
+  nvl(t2.new_price,cast(si.price as decimal(16,2)) )
+from
+  sku_info si
+left join
+   (select
+  t1.sku_id,
+  t1.new_price
+from
+  (
+select
+  sku_id,
+  new_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail
+where
+  change_date<='2021-10-01'
+      )t1
+where
+  t1.rk=1)t2
+on
+  si.sku_id=t2.sku_id;
+
+-- 2.10 即时订单比例
+
+select
+  user_id,
+  order_date,
+  custom_date,
+  row_number() over (partition by user_id order by order_date) rk
+from
+  delivery_info;
+
+-- 过滤第一次下单
+select
+  concat(round(sum(if(t1.custom_date=t1.order_date,1,0))/count(*)*100,2),'%')
+from
+  (select
+  user_id,
+  order_date,
+  custom_date,
+  row_number() over (partition by user_id order by order_date) rk
+from
+  delivery_info)t1
+where
+  t1.rk=1;
+
+
+-- 2.11 查询所有用户的连续登录两天及以上的日期区间
+
+-- 处理时间日期格式，并且对每个用户一天登录多次进行去重
+select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail;
+
+-- 判断连续
+
+select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts, rank() over (partition by t1.user_id order by t1.login_ts)) flag
+from
+  (select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail)t1;
+
+-- 拿到区间
+select
+  t2.user_id,
+  t2.login_ts,
+  t2.flag,
+  count(*)over (partition by t2.user_id,t2.flag) cn
+from
+  (select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts, rank() over (partition by t1.user_id order by t1.login_ts)) flag
+from
+  (select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail)t1)t2;
+
+select
+  distinct
+  t3.user_id,
+  first_value(t3.login_ts)over (partition by t3.user_id,t3.flag order by t3.login_ts rows  between  unbounded  preceding and unbounded  following),
+  last_value(t3.login_ts)over (partition by t3.user_id,t3.flag order by t3.login_ts rows  between  unbounded  preceding and unbounded  following)
+from
+  (select
+  t2.user_id,
+  t2.login_ts,
+  t2.flag,
+  count(*)over (partition by t2.user_id,t2.flag) cn
+from
+  (select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts, rank() over (partition by t1.user_id order by t1.login_ts)) flag
+from
+  (select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail)t1)t2)t3
+where
+  t3.cn>=2;
+
+--  第二种
+
+select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts, rank() over (partition by t1.user_id order by t1.login_ts)) flag
+from
+  (select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail)t1;
+
+-- 分组求区间
+select
+  t2.user_id,
+  min(t2.login_ts),
+  max(t2.login_ts)
+from
+  (select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts, rank() over (partition by t1.user_id order by t1.login_ts)) flag
+from
+  (select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail)t1)t2
+group by
+  t2.user_id,t2.flag
+having
+  count(*)>=2;
+
+-- 2.12 查询出每个用户的最近三笔订单
+select
+  user_id,
+  order_id,
+  create_date,
+  row_number() over (partition by user_id order by create_date desc) rk
+from
+  order_info;
+
+select
+  t1.user_id,
+  t1.order_id,
+  t1.create_date
+from
+  (
+select
+  user_id,
+  order_id,
+  create_date,
+  row_number() over (partition by user_id order by create_date desc) rk
+from
+  order_info
+      )t1
+where
+  rk<=3;
+
+-- 2.13 查询每个用户登录日期的最大空档期
+-- 改变日期格式 并且去重
+select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail;
+
+
+-- 拿到每个用户的下一次登陆日期
+select
+  t1.user_id,
+  t1.login_ts,
+  datediff(lead(t1.login_ts,1,'2021-10-10')over(partition by t1.user_id order by t1.login_ts),t1.login_ts)  next_time
+from
+  (
+select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+      )t1;
+
+-- 分组拿最大值
+select
+  t2.user_id,
+  max(t2.next_time)
+from
+  (
+select
+  t1.user_id,
+  t1.login_ts,
+  datediff(lead(t1.login_ts,1,'2021-10-10')over(partition by t1.user_id order by t1.login_ts),t1.login_ts)  next_time
+from
+  (
+select
+  distinct
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+      )t1
+      )t2
+group by
+ t2.user_id;
+
+-- 2.14 查询相同时刻多地登陆的用户
+select
+  user_id,
+  login_ts,
+  lag(logout_ts,1,'0000-00-00')over(partition by user_id order by login_ts) last_logout_ts
+from
+  user_login_detail;
+
+-- 判断 上一行的登出是否大于这一行的登录
+select
+  distinct
+  user_id
+from
+  (
+select
+  user_id,
+  login_ts,
+  lag(logout_ts,1,'0000-00-00')over(partition by user_id order by login_ts) last_logout_ts
+from
+  user_login_detail
+      )t1
+where
+  t1.last_logout_ts>=t1.login_ts;
+
+-- 异地登录  那几条数据发生异地登录的情况
+select
+  user_id,
+  login_ts,
+  logout_ts,
+  max(logout_ts)over(partition by user_id order by login_ts rows  between unbounded  preceding and 1 preceding)
+from
+  user_login_detail;
+
+
+-- 2.15 销售额完成任务指标的商品
+-- 按月统计每个商品的销售总额
+
+select
+  sku_id,
+  date_format(create_date,'yyyy-MM') ym,
+  sum(sku_num*price) sku_sum
+from
+  order_detail
+group by
+  sku_id,date_format(create_date,'yyyy-MM')
+having
+  (sku_id=1 and sku_sum>=21000)or(sku_id=2 and sku_sum>=10000);
+
+
+-- 考虑连续
+select
+  t1.sku_id,
+  t1.ym,
+  add_months(concat(t1.ym,'-01'),-rank() over (partition by t1.sku_id order by t1.ym))  rk
+from
+  (
+select
+  sku_id,
+  date_format(create_date,'yyyy-MM') ym,
+  sum(sku_num*price) sku_sum
+from
+  order_detail
+group by
+  sku_id,date_format(create_date,'yyyy-MM')
+having
+  (sku_id=1 and sku_sum>=21000)or(sku_id=2 and sku_sum>=10000)
+      )t1;
+
+
+select
+  t2.sku_id
+from
+  (
+select
+  t1.sku_id,
+  t1.ym,
+  add_months(concat(t1.ym,'-01'),-rank() over (partition by t1.sku_id order by t1.ym))  rk
+from
+  (
+select
+  sku_id,
+  date_format(create_date,'yyyy-MM') ym,
+  sum(sku_num*price) sku_sum
+from
+  order_detail
+group by
+  sku_id,date_format(create_date,'yyyy-MM')
+having
+  (sku_id=1 and sku_sum>=21000)or(sku_id=2 and sku_sum>=10000)
+      )t1
+      )t2
+group by
+  t2.sku_id,t2.rk
+having
+  count(*)>=2;
+
+
+-- 2.16 各品类销量前三的所有商品
+--先求每个商品的总件数
+select
+  sku_id,
+  sum(sku_num) sku_sum
+from
+  order_detail
+group by
+  sku_id;
+
+select
+  t1.sku_id,
+  t1.sku_sum,
+  si.category_id,
+  rank()over(partition by si.category_id order by t1.sku_sum desc) rk
+from
+  (
+select
+  sku_id,
+  sum(sku_num) sku_sum
+from
+  order_detail
+group by
+  sku_id
+      )t1
+join
+  sku_info si
+on
+  t1.sku_id=si.sku_id;
+
+-- 过滤
+select
+  t2.sku_id,
+  t2.category_id
+from
+  (
+select
+  t1.sku_id,
+  t1.sku_sum,
+  si.category_id,
+  rank()over(partition by si.category_id order by t1.sku_sum desc) rk
+from
+  (
+select
+  sku_id,
+  sum(sku_num) sku_sum
+from
+  order_detail
+group by
+  sku_id
+      )t1
+join
+  sku_info si
+on
+  t1.sku_id=si.sku_id
+      )t2
+where
+  t2.rk<=3;
+
+
+
+-- 2.17 各品类中商品价格的中位数
+-- 给每个品类下的商品按照价格排名，并求出每个品类的商品个数
+select
+  sku_id,
+  price,
+  category_id     ,
+  row_number() over (partition by category_id order by price) rk,
+  count(*)over(partition by  category_id) cn
+from
+  sku_info;
+
+--完成中位数的逻辑
+select
+  t1.sku_id,
+  t1.price,
+  t1.category_id
+from
+  (
+select
+  sku_id,
+  price,
+  category_id     ,
+  row_number() over (partition by category_id order by price) rk,
+  count(*)over(partition by  category_id) cn
+from
+  sku_info
+      )t1
+where
+  ((t1.cn%2=0 and (rk=cn/2 or rk=cn/2+1)))or(t1.cn%2=1 and (rk=(cn+1)/2));
+
+select
+  t2.category_id,
+  avg(price)
+from
+  (
+select
+  t1.sku_id,
+  t1.price,
+  t1.category_id
+from
+  (
+select
+  sku_id,
+  price,
+  category_id     ,
+  row_number() over (partition by category_id order by price) rk,
+  count(*)over(partition by  category_id) cn
+from
+  sku_info
+      )t1
+where
+  ((t1.cn%2=0 and (rk=cn/2 or rk=cn/2+1)))or(t1.cn%2=1 and (rk=(cn+1)/2))
+      )t2
+group by
+  t2.category_id;
+
+-- 2.18 找出销售额连续3天超过100的商品
+
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+having
+  sum(sku_num*price)>=100;
+-- 求连续
+select
+  t1.sku_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.sku_id order by t1.create_date))  rk
+from
+  (
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+having
+  sum(sku_num*price)>=100
+      )t1;
+
+select
+  sku_id
+from
+  (
+select
+  t1.sku_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.sku_id order by t1.create_date))  rk
+from
+  (
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+having
+  sum(sku_num*price)>=100
+      )t1
+      )t2
+group by
+  t2.sku_id,t2.rk
+having
+  count(*)>=3;
+
+-- 去重
+select
+  distinct
+  t3.sku_id
+from
+  (
+select
+  sku_id
+from
+  (
+select
+  t1.sku_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.sku_id order by t1.create_date))  rk
+from
+  (
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+having
+  sum(sku_num*price)>=100
+      )t1
+      )t2
+group by
+  t2.sku_id,t2.rk
+having
+  count(*)>=3
+      )t3;
+
+-- 2.19 求出商品连续售卖的时间区间
+
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date;
+
+-- 打排名标记 求连续
+select
+  t1.sku_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.sku_id order by t1.create_date)) rk
+from
+  (
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+      )t1;
+
+select
+  t2.sku_id,
+  min(t2.create_date),
+  max(t2.create_date)
+from
+  (
+select
+  t1.sku_id,
+  t1.create_date,
+  date_sub(t1.create_date,rank()over(partition by t1.sku_id order by t1.create_date)) rk
+from
+  (
+select
+  sku_id,
+  create_date
+from
+  order_detail
+group by
+  sku_id,create_date
+      )t1
+      )t2
+group by
+  t2.sku_id,t2.rk;
+
+-- 2.20 查看每件商品的售价涨幅情况
+
+-- 拿到最新的涨幅的情况
+select
+  sku_id,
+  new_price,
+  lead(new_price,1,null)over(partition by sku_id order by change_date desc) last_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail;
+
+-- 过滤 rk=1
+select
+  t1.sku_id,
+  t1.new_price,
+  t1.last_price
+from
+  (
+select
+  sku_id,
+  new_price,
+  lead(new_price,1,null)over(partition by sku_id order by change_date desc) last_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail
+      )t1
+where
+  t1.rk=1;
+
+-- 用商品表进行外连接
+select
+  si.sku_id,
+  if(t2.sku_id is null ,0,if(t2.last_price is null,t2.new_price-si.price,t2.new_price-t2.last_price)) price_change
+from
+  sku_info si
+left join
+  (
+select
+  t1.sku_id,
+  t1.new_price,
+  t1.last_price
+from
+  (
+select
+  sku_id,
+  new_price,
+  lead(new_price,1,null)over(partition by sku_id order by change_date desc) last_price,
+  row_number() over (partition by sku_id order by change_date desc) rk
+from
+  sku_price_modify_detail
+      )t1
+where
+  t1.rk=1
+      )t2
+on
+  si.sku_id=t2.sku_id
+order by
+  price_change asc;
+
+
+
+-- 2.21 销售订单首购和末购分析
+-- 三表连接
+select
+  distinct
+  oi.user_id,
+  first_value(oi.create_date)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) first_order,
+  last_value(oi.create_date)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) last_order,
+  count(*)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) cn
+from
+  order_info oi
+join
+  order_detail od
+on
+  oi.order_id=od.order_id
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+where
+  si.name in('xiaomi 10','apple 12','xiaomi 13');
+
+
+select
+  *
+from
+  (
+select
+  distinct
+  oi.user_id,
+  first_value(oi.create_date)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) first_order,
+  last_value(oi.create_date)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) last_order,
+  count(*)over(partition by oi.user_id order by oi.create_date rows  between unbounded preceding and unbounded following) cn
+from
+  order_info oi
+join
+  order_detail od
+on
+  oi.order_id=od.order_id
+join
+  sku_info si
+on
+  od.sku_id=si.sku_id
+where
+  si.name in('xiaomi 10','apple 12','xiaomi 13')
+      )t1
+where
+  t1.cn>=2;
+
+--2.22 统计活跃间隔对用户分级结果
+-- 拿到今天
+select
+  date_format(max(login_ts),'yyyy-MM-dd') today
+from
+  user_login_detail;
+
+-- 拿到每个用户的最早登陆时间和最晚登录时间
+
+select
+  user_id,
+  date_format(min(login_ts),'yyyy-MM-dd') first_login,
+  date_format(max(login_ts),'yyyy-MM-dd')  last_login
+from
+  user_login_detail
+group by
+  user_id;
+
+
+select
+  t1.user_id,
+  case
+      when datediff(t2.today,t1.last_login) <=7 and datediff(t2.today,t1.first_login)>7 then 'zhongshi'
+      when datediff(t2.today,t1.first_login)<=7 then 'xinjin'
+      when datediff(t2.today,t1.last_login)>7 and datediff(t2.today,t1.last_login)<=30  then 'chenshui'
+      when datediff(t2.today,t1.last_login) >30 then 'liushi'
+  end flag
+from
+  (
+select
+  user_id,
+  date_format(min(login_ts),'yyyy-MM-dd') first_login,
+  date_format(max(login_ts),'yyyy-MM-dd')  last_login
+from
+  user_login_detail
+group by
+  user_id
+      )t1
+join
+  (
+select
+  date_format(max(login_ts),'yyyy-MM-dd') today
+from
+  user_login_detail
+      )t2
+on 1=1;
+
+-- 分组求count
+
+select
+  t3.flag,
+  count(*) cn
+from
+  (
+select
+  t1.user_id,
+  case
+      when datediff(t2.today,t1.last_login) <=7 and datediff(t2.today,t1.first_login)>7 then 'zhongshi'
+      when datediff(t2.today,t1.first_login)<=7 then 'xinjin'
+      when datediff(t2.today,t1.last_login)>7 and datediff(t2.today,t1.last_login)<=30  then 'chenshui'
+      when datediff(t2.today,t1.last_login) >30 then 'liushi'
+  end flag
+from
+  (
+select
+  user_id,
+  date_format(min(login_ts),'yyyy-MM-dd') first_login,
+  date_format(max(login_ts),'yyyy-MM-dd')  last_login
+from
+  user_login_detail
+group by
+  user_id
+      )t1
+join
+  (
+select
+  date_format(max(login_ts),'yyyy-MM-dd') today
+from
+  user_login_detail
+      )t2
+on 1=1
+      )t3
+group by
+  t3.flag;
+
+
+
+-- 2.23 连续签到领金币数
+-- 去重
+
+select
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+group by
+  user_id,date_format(login_ts,'yyyy-MM-dd');
+
+-- 求连续 求出当前这一天是连续中的第几天
+
+
+select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts,rank() over (partition by t1.user_id order by t1.login_ts))  rk
+from
+  (
+select
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+group by
+  user_id,date_format(login_ts,'yyyy-MM-dd')
+      )t1;
+
+
+select
+  t2.user_id,
+  t2.login_ts,
+  count(*)over(partition by t2.user_id,t2.rk order by t2.login_ts) cn
+from
+  (
+select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts,rank() over (partition by t1.user_id order by t1.login_ts))  rk
+from
+  (
+select
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+group by
+  user_id,date_format(login_ts,'yyyy-MM-dd')
+      )t1
+      )t2;
+
+-- 领金币
+
+select
+  t3.user_id,
+  sum(if(cn%7=3,3,if(cn%7=0,7,1)))  sum_coin
+from
+  (
+select
+  t2.user_id,
+  t2.login_ts,
+  count(*)over(partition by t2.user_id,t2.rk order by t2.login_ts) cn
+from
+  (
+select
+  t1.user_id,
+  t1.login_ts,
+  date_sub(t1.login_ts,rank() over (partition by t1.user_id order by t1.login_ts))  rk
+from
+  (
+select
+  user_id,
+  date_format(login_ts,'yyyy-MM-dd') login_ts
+from
+  user_login_detail
+group by
+  user_id,date_format(login_ts,'yyyy-MM-dd')
+      )t1
+      )t2
+      )t3
+group by
+  t3.user_id
+order by
+  sum_coin desc;
