@@ -7,6 +7,9 @@
   <version>1.0.0</version>
   <modules>
     <module>JDBC</module>
+    <module>Java-Base</module>
+    <module>Leetcode</module>
+    <module>SSM-Parent</module>
   </modules>
   <name>Hodge-Podge</name>
   <url>http://maven.apache.org</url>
