@@ -1,8 +1,15 @@
-GitHub：大数据生态架构【源码解读】汇总（按照GitHub的star排倒序）:
-https://blog.csdn.net/LiuKingJia/article/details/103404538
+英文面试：
+https://github.com/eliaszon/Common-English-Mistakes-By-Chinese
+
+外企求职：
+https://github.com/eliaszon/Programmers-Overseas-Job-Interview-Handbook
+
+Java面试：
+https://github.com/Snailclimb/JavaGuide
+
+大数据面试：
+https://github.com/water8394/BigData-Interview
 
 
-
-响应式编程：
-https://www.yuque.com/leifengyang/springboot3/rg4wqgdbg8mfv04q
-
+面试：
+反向面试：https://github.com/perkfly/reverse-interview-zh
